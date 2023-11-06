@@ -128,6 +128,9 @@ string StFlow::domainType() const {
     if (m_usesLambda) {
         return "axisymmetric-flow";
     }
+    if (m_strain_imposed) {
+        return "planar-flow";
+    }
     return "unstrained-flow";
 }
 
@@ -195,6 +198,19 @@ void StFlow::setupGrid(size_t n, const double* z)
         }
         m_z[j] = z[j];
         m_dz[j-1] = m_z[j] - m_z[j-1];
+    }
+    if (m_strain_imposed) {
+        // Find stagnation point index
+        double min_grid = abs(m_z[0]);
+        for (size_t j = 1; j < m_points; j++) {
+            if ( abs(z[j]) <= min_grid ) {
+                jstag = j;
+                min_grid = abs(z[j]);
+            } else {
+                continue;
+            }
+        }
+        m_z[jstag] = 0;// Force x = 0 at jstag
     }
 }
 
@@ -316,13 +332,13 @@ void StFlow::eval(size_t jGlobal, double* xGlobal, double* rsdGlobal,
         jmin = std::max<size_t>(jpt, 1) - 1;
         jmax = std::min(jpt+1,m_points-1);
     }
-
+    
     updateProperties(jGlobal, x, jmin, jmax);
 
     if (m_do_radiation) { // Calculation of qdotRadiation
         computeRadiation(x, jmin, jmax);
     }
-
+ 
     evalContinuity(x, rsd, diag, rdt, jmin, jmax);
     evalMomentum(x, rsd, diag, rdt, jmin, jmax);
     evalEnergy(x, rsd, diag, rdt, jmin, jmax);
@@ -405,16 +421,23 @@ void StFlow::computeRadiation(double* x, size_t jmin, size_t jmax)
 void StFlow::evalContinuity(double* x, double* rsd, int* diag,
                             double rdt, size_t jmin, size_t jmax)
 {
-    // The left boundary has the same form for all cases.
+    // The left boundary has the same form for all cases except
+    // for strain-imposed flames
     if (jmin == 0) { // left boundary
-        rsd[index(c_offset_U,jmin)] = -(rho_u(x,jmin + 1) - rho_u(x,jmin))/m_dz[jmin]
+        if (m_strain_imposed) {
+            rsd[index(c_offset_U,jmin)] = drhoudz(x,jmin) + (m_strain_rate) * density(jmin)* V(x,jmin);
+        } else {
+            rsd[index(c_offset_U,jmin)] = -(rho_u(x,jmin + 1) - rho_u(x,jmin))/m_dz[jmin]
                                       -(density(jmin + 1)*V(x,jmin + 1)
                                       + density(jmin)*V(x,jmin));
+        }
         diag[index(c_offset_U,jmin)] = 0; // Algebraic constraint
     }
 
     if (jmax == m_points - 1) { // right boundary
-        if (m_usesLambda) { // axisymmetric flow
+        if (m_strain_imposed) { // planar strain-imposed flow
+            rsd[index(c_offset_U, jmax)] = density(jmax)*m_strain_rate*V(x,jmax) + drhoudz(x,jmax);
+        } else if (m_usesLambda) { // axisymmetric flow
             rsd[index(c_offset_U, jmax)] = rho_u(x, jmax);
         } else { // right boundary (same for unstrained/free-flow)
             rsd[index(c_offset_U, jmax)] = rho_u(x, jmax) - rho_u(x, jmax - 1);
@@ -425,7 +448,14 @@ void StFlow::evalContinuity(double* x, double* rsd, int* diag,
     // j0 and j1 are constrained to only interior points
     size_t j0 = std::max<size_t>(jmin, 1);
     size_t j1 = std::min(jmax, m_points - 2);
-    if (m_usesLambda) { // "axisymmetric-flow"
+    if (m_strain_imposed) { // planar strain-imposed flow
+        for (size_t j = j0; j <= j1; j++) { // interior points
+            // For "planar-flow", the continuity equation is modified directly
+            // by the strain rate
+            rsd[index(c_offset_U,j)] = drhoudz(x,j) + (m_strain_rate * density(j) * V(x,j));
+            diag[index(c_offset_U, j)] = 0; // Algebraic constraint
+        }
+    } else if (m_usesLambda) { // "axisymmetric-flow"
         for (size_t j = j0; j <= j1; j++) { // interior points
             // For "axisymmetric-flow", the continuity equation  propagates the
             // mass flow rate information to the left (j+1 -> j) from the value
@@ -462,7 +492,7 @@ void StFlow::evalContinuity(double* x, double* rsd, int* diag,
 void StFlow::evalMomentum(double* x, double* rsd, int* diag,
                           double rdt, size_t jmin, size_t jmax)
 {
-    if (!m_usesLambda) { //disable this equation
+    if (!m_usesLambda && !m_strain_imposed) { //disable this equation
         for (size_t j = jmin; j <= jmax; j++) {
             rsd[index(c_offset_V, j)] = V(x, j);
             diag[index(c_offset_V, j)] = 0;
@@ -471,11 +501,20 @@ void StFlow::evalMomentum(double* x, double* rsd, int* diag,
     }
 
     if (jmin == 0) { // left boundary
-        rsd[index(c_offset_V,jmin)] = V(x,jmin);
+        if (m_strain_imposed) {
+            rsd[index(c_offset_V,jmin)] = V(x,jmin) - 1.0;  
+            diag[index(c_offset_V,jmin)] = 1;  
+        } else {
+            rsd[index(c_offset_V,jmin)] = V(x,jmin);
+        }
     }
 
     if (jmax == m_points - 1) { // right boundary
-        rsd[index(c_offset_V,jmax)] = V(x,jmax);
+        if (m_strain_imposed) {
+            rsd[index(c_offset_V,jmax)] = m_strain_rate * (V(x,jmax) * V(x,jmax)) - m_strain_rate * density(0) / density(jmax);
+        } else {
+            rsd[index(c_offset_V,jmax)] = V(x,jmax);
+        }
         diag[index(c_offset_V,jmax)] = 0;
     }
 
@@ -483,10 +522,18 @@ void StFlow::evalMomentum(double* x, double* rsd, int* diag,
     size_t j0 = std::max<size_t>(jmin, 1);
     size_t j1 = std::min(jmax, m_points - 2);
     for (size_t j = j0; j <= j1; j++) { // interior points
-        rsd[index(c_offset_V,j)] = (shear(x, j) - lambda(x, j)
-                                    - rho_u(x, j) * dVdz(x, j)
-                                    - m_rho[j] * V(x, j) * V(x, j)) / m_rho[j]
-                                   - rdt * (V(x, j) - V_prev(j));
+        if (m_strain_imposed) {
+            rsd[index(c_offset_V,j)] = shear(x,j)/m_rho[j] 
+                                    - rho_u(x,j) * dVdz(x,j) / m_rho[j] 
+                                    - m_strain_rate * V(x,j) * V(x,j) 
+                                    + m_strain_rate * m_rho[0] / m_rho[j] 
+                                    - rdt * ((V(x,j) - V_prev(j)));
+        } else {
+            rsd[index(c_offset_V,j)] = (shear(x, j) - lambda(x, j)
+                                        - rho_u(x, j) * dVdz(x, j)
+                                        - m_rho[j] * V(x, j) * V(x, j)) / m_rho[j]
+                                    - rdt * (V(x, j) - V_prev(j));
+        }
         diag[index(c_offset_V, j)] = 1;
     }
 }
@@ -563,21 +610,33 @@ void StFlow::evalSpecies(double* x, double* rsd, int* diag,
     if (jmin == 0) { // left boundary
         double sum = 0.0;
         for (size_t k = 0; k < m_nsp; k++) {
-            sum += Y(x,k,jmin);
-            rsd[index(c_offset_Y + k, jmin)] = -(m_flux(k,jmin) +
+            if (m_strain_imposed) {
+                rsd[index(c_offset_Y + k, jmin)] = Y(x,k,jmin);
+            } else {
+                sum += Y(x,k,jmin);
+                rsd[index(c_offset_Y + k, jmin)] = -(m_flux(k,jmin) +
                                                 rho_u(x,jmin) * Y(x,k,jmin));
+            }
         }
-        rsd[index(c_offset_Y + leftExcessSpecies(), jmin)] = 1.0 - sum;
+        if (!m_strain_imposed){
+            rsd[index(c_offset_Y + leftExcessSpecies(), jmin)] = 1.0 - sum;
+        }
     }
 
     if (jmax == m_points - 1) { // right boundary
         double sum = 0.0;
         for (size_t k = 0; k < m_nsp; k++) {
-            sum += Y(x,k,jmax);
-            rsd[index(k+c_offset_Y,jmax)] = m_flux(k,jmax-1) +
+            if (m_strain_imposed) {
+                rsd[index(c_offset_Y + k, jmax)] = Y(x,k,jmax);
+            } else {
+                sum += Y(x,k,jmax);
+                rsd[index(k+c_offset_Y,jmax)] = m_flux(k,jmax-1) +
                                             rho_u(x,jmax)*Y(x,k,jmax);
+            }
         }
-        rsd[index(c_offset_Y + rightExcessSpecies(), jmax)] = 1.0 - sum;
+        if (!m_strain_imposed){
+            rsd[index(c_offset_Y + rightExcessSpecies(), jmax)] = 1.0 - sum;
+        }
         diag[index(c_offset_Y + rightExcessSpecies(), jmax)] = 0;
     }
 
@@ -746,7 +805,11 @@ bool StFlow::componentActive(size_t n) const
 {
     switch (n) {
     case c_offset_V: // spread_rate
-        return m_usesLambda;
+        if (m_strain_imposed) {
+            return m_strain_imposed;
+        } else {
+            return m_usesLambda;
+        }
     case c_offset_L: // lambda
         return m_usesLambda;
     case c_offset_E: // eField

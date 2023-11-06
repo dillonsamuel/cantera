@@ -90,7 +90,9 @@ cdef extern from "cantera/oneD/StFlow.h":
         cbool withSoret()
         void setFreeFlow()
         void setAxisymmetricFlow()
-
+        void setCounterflowStrainImposed()
+        void setStrainRate(double)
+        double StrainRate()
 
 cdef extern from "cantera/oneD/Sim1D.h":
     cdef cppclass CxxSim1D "Cantera::Sim1D":

@@ -146,7 +146,7 @@ void Inlet1D::init()
     // Note that an inlet object can only be a terminal object - it cannot have
     // flows on both the left and right
     if (m_flow_left && !m_flow_right) {
-        if (!m_flow_left->isStrained()) {
+        if (!m_flow_left->isStrained() && !m_flow_left->isStrainedImposed()) {
             throw CanteraError("Inlet1D::init",
                 "Right inlets with right-to-left flow are only supported for "
                 "strained flow configurations.");
@@ -159,7 +159,7 @@ void Inlet1D::init()
     } else {
         throw CanteraError("Inlet1D::init", "Inlet1D is not properly connected.");
     }
-
+    
     // components = u, V, T, lambda, + mass fractions
     m_nsp = m_flow->phase().nSpecies();
     m_yin.resize(m_nsp, 0.0);
@@ -203,19 +203,27 @@ void Inlet1D::eval(size_t jg, double* xg, double* rg,
             // The flow domain sets this to -rho*u. Add mdot to specify the mass
             // flow rate
             rb[c_offset_L] += m_mdot;
-
             // spreading rate. The flow domain sets this to V(0),
             // so for finite spreading rate subtract m_V0.
             rb[c_offset_V] -= m_V0;
+        } else if (m_flow->isStrainedImposed()) {
+            // For strain imposed flames, the momentum boundary condition is
+            // implicitly defined by flow domain 
+            rb[c_offset_V] -= 0.0;
+            rb[c_offset_L] = xb[c_offset_L];
         } else {
             rb[c_offset_U] = m_flow->density(0) * xb[c_offset_U] - m_mdot;
             rb[c_offset_L] = xb[c_offset_L];
         }
-
         // add the convective term to the species residual equations
         for (size_t k = 0; k < m_nsp; k++) {
-            if (k != m_flow_right->leftExcessSpecies()) {
-                rb[c_offset_Y+k] += m_mdot*m_yin[k];
+            if (m_flow->isStrainedImposed()) {
+                // fixed mass fraction, implictly defined by flow domain
+                rb[c_offset_Y+k] -= m_yin[k];
+            } else {
+                if (k != m_flow_right->leftExcessSpecies()) {
+                    rb[c_offset_Y+k] += m_mdot*m_yin[k];
+                }
             }
         }
 
@@ -223,16 +231,29 @@ void Inlet1D::eval(size_t jg, double* xg, double* rg,
         // right inlet (should only be used for counter-flow flames)
         // Array elements corresponding to the last point in the flow domain
         double* rb = rg + loc() - m_flow->nComponents();
-        rb[c_offset_V] -= m_V0;
+        if (m_flow->isStrainedImposed()) {
+            rb[c_offset_V] -= 0.0;
+        } else {    
+            rb[c_offset_V] -= m_V0;
+        }
         if (m_flow->doEnergy(m_flow->nPoints() - 1)) {
             rb[c_offset_T] -= m_temp; // T
         } else {
             rb[c_offset_T] -= m_flow->T_fixed(m_flow->nPoints() - 1);
         }
-        rb[c_offset_U] += m_mdot; // u
+        if (m_flow->isStrainedImposed()) {
+            rb[c_offset_U] -= 0;
+        } else {
+            rb[c_offset_U] += m_mdot; // u
+        }
         for (size_t k = 0; k < m_nsp; k++) {
-            if (k != m_flow_left->rightExcessSpecies()) {
-                rb[c_offset_Y+k] += m_mdot * m_yin[k];
+            if (m_flow->isStrainedImposed()) {
+                // fixed mass fraction, implictly defined by flow domain
+                rb[c_offset_Y+k] -= m_yin[k];
+            } else {
+                if (k != m_flow_left->rightExcessSpecies()) {
+                    rb[c_offset_Y+k] += m_mdot * m_yin[k];
+                }
             }
         }
     }

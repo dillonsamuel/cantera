@@ -64,6 +64,16 @@ DomainFactory::DomainFactory()
         ret->setAxisymmetricFlow();
         return ret;
     });
+    reg("planar-flow", [](shared_ptr<Solution> solution, const string& id) {
+        StFlow* ret;
+        if (solution->transport()->transportModel() == "ionized-gas") {
+            ret = new IonFlow(solution, id);
+        } else {
+            ret = new StFlow(solution, id);
+        }
+        ret->setCounterflowStrainImposed();
+        return ret;
+    });
     reg("unstrained-flow", [](shared_ptr<Solution> solution, const string& id) {
         StFlow* ret;
         if (solution->transport()->transportModel() == "ionized-gas") {

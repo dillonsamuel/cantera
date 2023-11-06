@@ -595,6 +595,19 @@ cdef class _FlowBase(Domain1D):
         """
         self.flow.setAxisymmetricFlow()
 
+    def set_strain_imposed(self):
+        """
+        Set imposed strain rate for counterflow diffusion flame
+        """
+        self.flow.setCounterflowStrainImposed()
+
+    property strain_rate:
+        """ Set/get imposed strain rate. """
+        def __get__(self):
+            return self.flow.StrainRate()
+        def __set__(self, double epsilon):
+            self.flow.setStrainRate(epsilon)
+
     @property
     def type(self):
         """
@@ -695,6 +708,31 @@ cdef class AxisymmetricFlow(_FlowBase):
     """
     _domain_type = "axisymmetric-flow"
 
+cdef class PlanarFlow(_FlowBase):
+    r"""
+    An planar flow domain. The equations solved are the similarity equations for
+    the flow in a finite-height gap of infinite radial extent. The solution variables
+    are:
+
+    *velocity*
+        axial velocity
+    *spread_rate*
+        radial velocity divided by imposed strain-rate (strain-imposed) 
+        or radius (velocity-imposed)
+    *T*
+        temperature
+    *lambda*
+        :math:`(1/r)(dP/dr)`. Equation used only if velocity-imposed
+    *Y_k*
+        species mass fractions
+
+    It may be shown that if the boundary conditions on these variables are independent
+    of radius, then a similarity solution to the exact governing equations exists in
+    which these variables are all independent of radius. As implemented here, the 
+    governing equations assume an ideal gas mixture. Arbitrary chemistry is allowed, 
+    as well as arbitrary variation of the transport properties.
+    """
+    _domain_type = "planar-flow"
 
 cdef class Sim1D:
     """

@@ -165,6 +165,7 @@ public:
         m_dovisc = false;
         m_isFree = true;
         m_usesLambda = false;
+        m_strain_imposed = false;
     }
 
     //! Set flow configuration for axisymmetric counterflow flames, using specified
@@ -173,7 +174,25 @@ public:
         m_dovisc = true;
         m_isFree = false;
         m_usesLambda = true;
+        m_strain_imposed = false;
     }
+
+    //! Set flow configuration for planar strain-imposed counterflow flames, using
+    //! specified inlet mass fluxes.
+    void setCounterflowStrainImposed() {
+        m_dovisc = true;
+        m_isFree = false;
+        m_usesLambda = false;
+        m_strain_imposed = true;
+    }
+
+    //! Set imposed strain rate for planar strain-imposed counterflow flames
+    void setStrainRate(double a) {
+        m_strain_rate = a;
+    }
+
+    //! Get imposed strain rate for planar strain-imposed counterflow flames
+    double StrainRate() const { return m_strain_rate; }
 
     //! Set flow configuration for burner-stabilized flames, using specified inlet mass
     //! fluxes.
@@ -181,6 +200,7 @@ public:
         m_dovisc = false;
         m_isFree = false;
         m_usesLambda = false;
+        m_strain_imposed = false;
     }
 
     void solveEnergyEqn(size_t j=npos);
@@ -273,6 +293,15 @@ public:
      */
     bool isStrained() const {
         return m_usesLambda;
+    }
+
+    /**
+     * Retrieve flag indicating whether flow uses strain-imposed or
+     * velocity-imposed radial momentum definition. If true, strain-imposed
+     * definition is used, which modfied continuity and momentum equatiions
+     */
+    bool isStrainedImposed() const {
+        return m_strain_imposed;
     }
 
     void setViscosityFlag(bool dovisc) {
@@ -548,6 +577,15 @@ protected:
     //!
     //! These use upwind differencing, assuming u(z) is negative
     //! @{
+    double drhoudz(const double* x, size_t j) const {
+        if (j < jstag ) {
+            return (rho_u(x,j+1) - rho_u(x,j))/m_dz[j];
+        } else if (j > jstag ) {
+            return (rho_u(x,j) - rho_u(x,j-1))/m_dz[j-1];
+        } else {
+            return 2.0 * (rho_u(x,j))/(m_dz[j] + m_dz[j-1]);
+        }
+    }
     double dVdz(const double* x, size_t j) const {
         size_t jloc = (u(x,j) > 0.0 ? j : j + 1);
         return (V(x,jloc) - V(x,jloc-1))/m_dz[jloc-1];
@@ -662,6 +700,12 @@ protected:
     bool m_dovisc;
     bool m_isFree;
     bool m_usesLambda;
+
+    //! For strain-imposed counterflow diffusion flames, define a strain rate
+    //! and a stagnation point for boundary condition u=0 at x=0
+    bool m_strain_imposed;
+    double m_strain_rate;
+    size_t jstag;
 
     //! Update the transport properties at grid points in the range from `j0`
     //! to `j1`, based on solution `x`.
