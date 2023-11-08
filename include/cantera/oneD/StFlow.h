@@ -177,8 +177,8 @@ public:
         m_strain_imposed = false;
     }
 
-    //! Set flow configuration for planar strain-imposed counterflow flames, using
-    //! specified inlet mass fluxes.
+    // ! Set flow configuration for planar strain-imposed counterflow flames, using
+    // ! specified inlet mass fluxes.
     void setCounterflowStrainImposed() {
         m_dovisc = true;
         m_isFree = false;
@@ -186,12 +186,12 @@ public:
         m_strain_imposed = true;
     }
 
-    //! Set imposed strain rate for planar strain-imposed counterflow flames
+    // ! Set imposed strain rate for planar strain-imposed counterflow flames
     void setStrainRate(double a) {
         m_strain_rate = a;
     }
 
-    //! Get imposed strain rate for planar strain-imposed counterflow flames
+    // ! Get imposed strain rate for planar strain-imposed counterflow flames
     double StrainRate() const { return m_strain_rate; }
 
     //! Set flow configuration for burner-stabilized flames, using specified inlet mass
@@ -371,6 +371,8 @@ protected:
      */
     void computeRadiation(double* x, size_t jmin, size_t jmax);
 
+    /* Compute jstag for strain imposed counterflowflames */
+    void evalJstag();
     /**
      * Evaluate the continuity equation residual.
      *

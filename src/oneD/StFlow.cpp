@@ -199,19 +199,20 @@ void StFlow::setupGrid(size_t n, const double* z)
         m_z[j] = z[j];
         m_dz[j-1] = m_z[j] - m_z[j-1];
     }
-    if (m_strain_imposed) {
-        // Find stagnation point index
-        double min_grid = abs(m_z[0]);
-        for (size_t j = 1; j < m_points; j++) {
-            if ( abs(z[j]) <= min_grid ) {
-                jstag = j;
-                min_grid = abs(z[j]);
-            } else {
-                continue;
-            }
+}
+
+void StFlow::evalJstag()
+{
+    double min_grid = abs(m_z[0]);
+    for (size_t j = 1; j < m_points; j++) {
+        if ( abs(m_z[j]) <= min_grid ) {
+            jstag = j;
+            min_grid = abs(m_z[j]);
+        } else {
+            continue;
         }
-        m_z[jstag] = 0;// Force x = 0 at jstag
     }
+    m_z[jstag] = 0; //Force x = 0 at jstag
 }
 
 void StFlow::resetBadValues(double* xg)
@@ -338,7 +339,9 @@ void StFlow::eval(size_t jGlobal, double* xGlobal, double* rsdGlobal,
     if (m_do_radiation) { // Calculation of qdotRadiation
         computeRadiation(x, jmin, jmax);
     }
- 
+    if (m_strain_imposed) { // Find stagnation point and ensure x = 0
+        evalJstag();
+    }
     evalContinuity(x, rsd, diag, rdt, jmin, jmax);
     evalMomentum(x, rsd, diag, rdt, jmin, jmax);
     evalEnergy(x, rsd, diag, rdt, jmin, jmax);

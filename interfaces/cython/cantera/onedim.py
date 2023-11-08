@@ -1472,17 +1472,17 @@ class CounterflowStrainImposed(FlameBase):
         """
         # self.strain_rate=strain_rate
         #: `Inlet1D` at the left of the domain representing the fuel mixture
-        #: `PlanarFlow` domain representing the flame
-        self.flame = PlanarFlow(gas, name='flame')
-        self.flame.set_strain_imposed()
-
         self.fuel_inlet = Inlet1D(name='fuel_inlet', phase=gas)
         self.fuel_inlet.T = gas.T
 
         #: `Inlet1D` at the right of the domain representing the oxidizer mixture
         self.oxidizer_inlet = Inlet1D(name='oxidizer_inlet', phase=gas)
         self.oxidizer_inlet.T = gas.T
-
+        
+        #: `PlanarFlow` domain representing the flame
+        self.flame = PlanarFlow(gas, name='flame')
+        self.flame.set_strain_imposed()
+        
         if width is not None:
             grid = np.linspace(-1,1,5) * width/2.0
 

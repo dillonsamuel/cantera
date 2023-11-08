@@ -580,6 +580,13 @@ cdef class _FlowBase(Domain1D):
                 data[j] = self.flow.radiativeHeatLoss(j)
             return data
 
+    property strain_rate:
+        """ Set/get imposed strain rate. """
+        def __get__(self):
+            return self.flow.StrainRate()
+        def __set__(self, double a):
+            self.flow.setStrainRate(a)
+    
     def set_free_flow(self):
         """
         Set flow configuration for freely-propagating flames, using an internal
@@ -600,13 +607,6 @@ cdef class _FlowBase(Domain1D):
         Set imposed strain rate for counterflow diffusion flame
         """
         self.flow.setCounterflowStrainImposed()
-
-    property strain_rate:
-        """ Set/get imposed strain rate. """
-        def __get__(self):
-            return self.flow.StrainRate()
-        def __set__(self, double epsilon):
-            self.flow.setStrainRate(epsilon)
 
     @property
     def type(self):
@@ -707,6 +707,7 @@ cdef class AxisymmetricFlow(_FlowBase):
     chemistry is allowed, as well as arbitrary variation of the transport properties.
     """
     _domain_type = "axisymmetric-flow"
+
 
 cdef class PlanarFlow(_FlowBase):
     r"""
